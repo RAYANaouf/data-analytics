@@ -23,7 +23,9 @@
   "items",
   "negative_stock",
   "negative_stock_items",
-  "reset_to_zero_btn"
+  "reset_to_zero_btn",
+  "overload_stock",
+  "overload_items"
  ],
  "fields": [
   {
@@ -116,13 +118,23 @@
    "fieldname": "reset_to_zero_btn",
    "fieldtype": "Button",
    "label": "Make As Zero"
+  },
+  {
+   "fieldname": "overload_stock",
+   "fieldtype": "Section Break",
+   "label": "Overload Stock"
+  },
+  {
+   "fieldname": "overload_items",
+   "fieldtype": "Table",
+   "options": "Item Weight Measure Item"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-17 15:23:48.662397",
+ "modified": "2025-08-17 15:54:46.152083",
  "modified_by": "Administrator",
  "module": "Data Analytics",
  "name": "Item Weight Measure",

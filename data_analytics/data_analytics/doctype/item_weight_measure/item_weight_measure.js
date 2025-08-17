@@ -41,8 +41,13 @@ frappe.ui.form.on("Item Weight Measure", {
     generate_btn(frm) {
         frm.clear_table("items");
         frm.refresh_field("items");
+
         frm.clear_table("negative_stock_items");
         frm.refresh_field("negative_stock_items");
+        
+        frm.clear_table("overload_items");
+        frm.refresh_field("overload_items");
+        
         frappe.call({
             method: "data_analytics.data_analytics.doctype.item_weight_measure.item_weight_measure.generate_item_best_month",
             args: {
@@ -74,9 +79,20 @@ frappe.ui.form.on("Item Weight Measure", {
                             overload: item.overload,
                         }); 
                     }
+                    if(item.overload > 0){
+                        frm.add_child("overload_items", {
+                            item: item.item,
+                            qty: item.best_sell,
+                            date: item.date,
+                            need: item.need,
+                            on_stock: item.on_stock,
+                            overload: item.overload,
+                        }); 
+                    }
                 });
                 frm.refresh_field("items");
                 frm.refresh_field("negative_stock_items");
+                frm.refresh_field("overload_items");
             }
         });
     },
