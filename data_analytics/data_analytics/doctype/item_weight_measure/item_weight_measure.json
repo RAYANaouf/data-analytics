@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-08-17 10:34:24.822570",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "column_break_bbsi",
+  "warehouse",
+  "filter_section",
+  "from_date",
+  "column_break_q3pw",
+  "to_date",
+  "section_break_9mrj",
+  "column_break_z4ix",
+  "column_break_9ykm",
+  "column_break_llwt",
+  "generate_btn",
+  "column_break_9xge",
+  "column_break_msxy"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_bbsi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "column_break_z4ix",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_9ykm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_9xge",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_msxy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_llwt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_9mrj",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "from_date",
+   "fieldname": "filter_section",
+   "fieldtype": "Section Break",
+   "label": "Filters",
+   "options": "from_date"
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date"
+  },
+  {
+   "fieldname": "column_break_q3pw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date"
+  },
+  {
+   "fieldname": "generate_btn",
+   "fieldtype": "Button",
+   "label": "Generate"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-08-17 11:58:30.610842",
+ "modified_by": "Administrator",
+ "module": "Data Analytics",
+ "name": "Item Weight Measure",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
