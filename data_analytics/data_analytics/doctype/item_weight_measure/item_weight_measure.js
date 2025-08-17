@@ -39,14 +39,27 @@ frappe.ui.form.on("Item Weight Measure", {
     },
 
     generate_btn(frm) {
-        frappe.msgprint("Generate clicked");
         frappe.call({
             method: "data_analytics.data_analytics.doctype.item_weight_measure.item_weight_measure.generate_item_best_month",
+            args: {
+                company: frm.doc.company,
+                warehouse: frm.doc.warehouse,
+                from_date: frm.doc.from_date,
+                to_date: frm.doc.to_date,
+            },
             freeze: true,
             freeze_message: __("Computing…"),
             callback: (r) => {
-                console.log("my result :: " , r);
+                console.log("my result ===> " , r);
                 frappe.msgprint("Done");
+                r.message.results.forEach((item) => {
+                    frm.add_child("items", {
+                        item: item.item_code,
+                        qty: item.total_qty,
+                        date: item.ym,
+                    });
+                });
+                frm.refresh_field("items");
             }
         });
     }

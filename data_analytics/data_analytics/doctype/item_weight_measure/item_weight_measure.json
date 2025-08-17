@@ -18,7 +18,9 @@
   "column_break_llwt",
   "generate_btn",
   "column_break_9xge",
-  "column_break_msxy"
+  "column_break_msxy",
+  "result_section",
+  "items"
  ],
  "fields": [
   {
@@ -86,13 +88,23 @@
    "fieldname": "generate_btn",
    "fieldtype": "Button",
    "label": "Generate"
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "options": "Item Weight Measure Item"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-17 11:58:30.610842",
+ "modified": "2025-08-17 14:04:44.570004",
  "modified_by": "Administrator",
  "module": "Data Analytics",
  "name": "Item Weight Measure",
