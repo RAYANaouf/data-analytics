@@ -20,7 +20,10 @@
   "column_break_9xge",
   "column_break_msxy",
   "result_section",
-  "items"
+  "items",
+  "negative_stock",
+  "negative_stock_items",
+  "reset_to_zero_btn"
  ],
  "fields": [
   {
@@ -98,13 +101,28 @@
    "fieldname": "items",
    "fieldtype": "Table",
    "options": "Item Weight Measure Item"
+  },
+  {
+   "fieldname": "negative_stock",
+   "fieldtype": "Section Break",
+   "label": "Negative Stock"
+  },
+  {
+   "fieldname": "negative_stock_items",
+   "fieldtype": "Table",
+   "options": "Item Weight Measure Item"
+  },
+  {
+   "fieldname": "reset_to_zero_btn",
+   "fieldtype": "Button",
+   "label": "Make As Zero"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-17 14:04:44.570004",
+ "modified": "2025-08-17 15:23:48.662397",
  "modified_by": "Administrator",
  "module": "Data Analytics",
  "name": "Item Weight Measure",

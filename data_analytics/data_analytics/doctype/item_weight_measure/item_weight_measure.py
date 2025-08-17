@@ -11,6 +11,10 @@ class ItemWeightMeasure(Document):
 	pass
 
 
+import frappe
+from datetime import date, timedelta
+from frappe.utils import getdate
+
 @frappe.whitelist()
 def generate_item_best_month(
     company: str,
@@ -19,14 +23,11 @@ def generate_item_best_month(
     to_date: str | None = None,
 ):
     """
-    Compute, for each item, the month (YYYY-MM) with the highest sold quantity.
-    Args:
-      company   (str)  : required
-      warehouse (str?) : optional
-      from_date (str?) : 'YYYY-MM-DD' (defaults to ~12 months ago, first day)
-      to_date   (str?) : 'YYYY-MM-DD' (defaults to today)
-      write_back(int)  : if truthy, write results into Single 'Item Weight Measure'
-    Returns: dict { summary, results }
+    For each item in (company, warehouse, date-range):
+      1) find the month with the highest sold qty (best_sell) from Sales Invoices
+      2) read current on-hand qty in that warehouse (on_stock) from Bin
+      3) compute need / overload
+    Returns: { summary, results }
     """
 
     company = (company or "").strip()
@@ -37,9 +38,7 @@ def generate_item_best_month(
     if not warehouse:
         frappe.throw("Please provide a Warehouse.")
 
-	
-
-    # Date range defaults
+    # Dates (defaults ~last 12 months)
     today = date.today()
     default_from = (today.replace(day=1) - timedelta(days=365))
     from_date = getdate(from_date) if from_date else default_from
@@ -50,51 +49,78 @@ def generate_item_best_month(
         "si.docstatus = 1",
         "si.company = %(company)s",
         "si.posting_date BETWEEN %(from)s AND %(to)s",
-		"sii.warehouse = %(wh)s"
+        "sii.warehouse = %(wh)s",
+        # Optional: ignore returns; uncomment next line if you don't want negative months
+        # "IFNULL(si.is_return, 0) = 0",
     ]
     params = {"company": company, "from": str(from_date), "to": str(to_date), "wh": warehouse}
- 
-
-
     where_sql = " AND ".join(conditions)
 
-    # One-shot SQL: aggregate per item/month, rank by qty desc (tie-break by most recent), keep rn=1
-    sql = f"""
+    # Best month per item (window function)
+    best_sql = f"""
         WITH monthly AS (
             SELECT
-                sii.item_code                               AS item_code,
-                DATE_FORMAT(si.posting_date, '%%Y-%%m')      AS ym,
-                YEAR(si.posting_date)                        AS y,
-                MONTH(si.posting_date)                       AS m,
-                SUM(sii.qty)                                 AS total_qty
+                sii.item_code                          AS item_code,
+                YEAR(si.posting_date)                  AS y,
+                MONTH(si.posting_date)                 AS m,
+                SUM(sii.qty)                           AS total_qty
             FROM `tabSales Invoice Item` sii
             JOIN `tabSales Invoice` si ON si.name = sii.parent
             WHERE {where_sql}
-            GROUP BY sii.item_code, ym, y, m
+            GROUP BY sii.item_code, y, m
         ),
         ranked AS (
             SELECT
-                item_code, ym, y, m, total_qty,
+                item_code, y, m, total_qty,
                 ROW_NUMBER() OVER (
                     PARTITION BY item_code
                     ORDER BY total_qty DESC, y DESC, m DESC
                 ) AS rn
             FROM monthly
         )
-        SELECT item_code, ym, y, m, total_qty
+        SELECT item_code, y, m, total_qty
         FROM ranked
         WHERE rn = 1
         ORDER BY item_code
     """
+    best_rows = frappe.db.sql(best_sql, params, as_dict=True)  # [{item_code,y,m,total_qty}]
 
-    rows = frappe.db.sql(sql, params, as_dict=True)  # [{item_code, ym, y, m, total_qty}...]
+    # Gather on-hand stock for those items in this warehouse
+    item_codes = [r["item_code"] for r in best_rows if r.get("item_code")]
+    bins = {}
+    if item_codes:
+        placeholders = ", ".join(["%s"] * len(item_codes))
+        bin_sql = f"""
+            SELECT item_code, COALESCE(actual_qty, 0) AS actual_qty
+            FROM `tabBin`
+            WHERE warehouse = %s AND item_code IN ({placeholders})
+        """
+        for b in frappe.db.sql(bin_sql, [warehouse, *item_codes], as_dict=True):
+            bins[b["item_code"]] = float(b["actual_qty"] or 0)
+
+    # Build final rows in the shape you asked for
+    results = []
+    for r in best_rows:
+        item = r["item_code"]
+        y, m = int(r["y"]), int(r["m"])
+        best_sell = float(r["total_qty"] or 0)
+        on_stock = float(bins.get(item, 0.0))
+        need = max(best_sell - on_stock, 0.0)
+        overload = max(on_stock - best_sell, 0.0)
+
+        results.append({
+            "item": item,
+            "date": f"{y:04d}-{m:02d}-01",  # first day of best month (Date field friendly)
+            "best_sell": best_sell,
+            "on_stock": on_stock,
+            "need": need,
+            "overload": overload,
+        })
 
     summary = {
-        "items_with_best_month": len(rows),
+        "items_with_best_month": len(results),
         "date_range": f"{from_date} → {to_date}",
         "company": company,
-        "warehouse": warehouse or None,
+        "warehouse": warehouse,
     }
-
-    # Also return the rows so the client can render without reloading, if desired
-    return {"summary": summary, "results": rows}
+    return {"summary": summary, "results": results}

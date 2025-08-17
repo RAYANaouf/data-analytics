@@ -39,6 +39,10 @@ frappe.ui.form.on("Item Weight Measure", {
     },
 
     generate_btn(frm) {
+        frm.clear_table("items");
+        frm.refresh_field("items");
+        frm.clear_table("negative_stock_items");
+        frm.refresh_field("negative_stock_items");
         frappe.call({
             method: "data_analytics.data_analytics.doctype.item_weight_measure.item_weight_measure.generate_item_best_month",
             args: {
@@ -51,18 +55,58 @@ frappe.ui.form.on("Item Weight Measure", {
             freeze_message: __("Computing…"),
             callback: (r) => {
                 console.log("my result ===> " , r);
-                frappe.msgprint("Done");
                 r.message.results.forEach((item) => {
                     frm.add_child("items", {
-                        item: item.item_code,
-                        qty: item.total_qty,
-                        date: item.ym,
+                        item: item.item,
+                        qty: item.best_sell,
+                        date: item.date,
+                        need: item.need,
+                        on_stock: item.on_stock,
+                        overload: item.overload,
                     });
+                    if(item.on_stock < 0){
+                        frm.add_child("negative_stock_items", {
+                            item: item.item,
+                            qty: item.best_sell,
+                            date: item.date,
+                            need: item.need,
+                            on_stock: item.on_stock,
+                            overload: item.overload,
+                        }); 
+                    }
                 });
                 frm.refresh_field("items");
+                frm.refresh_field("negative_stock_items");
             }
         });
-    }
+    },
+
+    reset_to_zero_btn(frm) {
+        const rows = frm.doc.negative_stock_items || [];
+        if (!rows.length) {
+          frappe.show_alert({ message: __("No rows in Negative Stock Items."), indicator: "orange" });
+          return;
+        }
+      
+        frappe.confirm(
+          __("Set {0} row(s) On stock → 0 and recompute Need/Overload?", [rows.length]),
+          () => {
+            rows.forEach((r) => {
+              // qty may be stored in `qty` or `best_sell` depending on your child schema
+              const qty = Number(r.qty ?? r.best_sell) || 0;
+      
+              r.on_stock = 0;
+              r.need = qty;      // since on_stock is now 0
+              r.overload = 0;
+            });
+      
+            frm.refresh_field("negative_stock_items");
+            frappe.show_alert({ message: __("Reset complete."), indicator: "green" });
+          }
+        );
+      }
+      
+
 });
   
   
