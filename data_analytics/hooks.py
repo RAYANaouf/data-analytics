@@ -247,7 +247,8 @@ app_license = "mit"
 
 fixtures = [
     {
-        'dt': 'DocType'
-    }
+        'dt': 'DocType',
+        'filters': [['name', 'in', [ "Item Weight Measure"]]]
+    },
 ]
 
