@@ -1,80 +1,108 @@
-
-# data_analytics/api/brand_warehouse_summary.py
+import json
 import frappe
-from frappe import _
+from collections import defaultdict
 
 @frappe.whitelist()
 def brand_warehouse_summary(companies=None, warehouses=None, include_groups=0, include_disabled=0, limit_brands=0):
     """
-    Returns stock presence per ROOT brand per warehouse.
+    Robust: auto-detect Brand custom fields for root/father, aggregate Bin by root brand per warehouse.
 
-    Params (all optional):
-      - companies: JSON array of company names; if empty, all companies
-      - warehouses: JSON array of warehouse names; if empty, all warehouses in companies
-      - include_groups: 1 to include is_group=1 nodes; default 0
-      - include_disabled: 1 to include disabled warehouses; default 0
-      - limit_brands: int, >0 to limit number of root brands returned (top by overall presence)
-
-    Output:
-    {
-      "root_brands": ["RootA", "RootB", ...],
-      "warehouses": [
-        {"name":"WH-001","warehouse_name":"Main","company":"Company A","parent_warehouse":None,"is_group":0,"disabled":0,
-         "brands":[{"root_brand":"RootA","qty":123.0,"item_count":17}, ...]
-        }, ...
-      ]
-    }
+    URL (server script): /api/method/brand_warehouse_summary
+    URL (custom app):    /api/method/data_analytics.api.brand_warehouse_summary
     """
-    import json
-    # ---------- parse inputs ----------
+
+    # ---------- helpers ----------
     def parse_list(x):
-        if not x: return []
-        if isinstance(x, list): return x
+        if not x:
+            return []
+        if isinstance(x, list):
+            return x
         try:
             return json.loads(x)
         except Exception:
             return [x]
 
-    companies = parse_list(companies)
-    warehouses = parse_list(warehouses)
-    include_groups = int(include_groups or 0)
-    include_disabled = int(include_disabled or 0)
-    limit_brands = int(limit_brands or 0)
+    def bool_int(x):
+        return 1 if str(x).strip() in ("1", "True", "true", "YES", "yes") else 0
 
-    # ---------- load brands & compute root mapping ----------
-    # Expect Brand has custom fields: father (Link to Brand), root (Check)
-    brands = frappe.get_all("Brand", fields=["name", "father", "root"])
-    bidx = {b["name"]: b for b in brands}
+    companies        = parse_list(companies)
+    warehouses       = parse_list(warehouses)
+    include_groups   = bool_int(include_groups)
+    include_disabled = bool_int(include_disabled)
+    limit_brands     = int(limit_brands or 0)
 
-    # find all roots
-    root_brands = {b["name"] for b in brands if int(b.get("root") or 0) == 1}
-    if not root_brands:
-        # if none flagged as root, treat brands with no father as roots
-        root_brands = {b["name"] for b in brands if not b.get("father")}
+    # ---------- detect Brand custom fields ----------
+    meta = frappe.get_meta("Brand")
+    brand_fields = {f.fieldname for f in meta.fields}
 
-    # map brand -> root brand by walking 'father'
+    # Try common names in order
+    def pick(*candidates):
+        for c in candidates:
+            if c in brand_fields:
+                return c
+        return None
+
+    father_key = pick("father", "parent_brand", "parent", "custom_father")
+    root_key   = pick("root", "is_root", "custom_root")
+
+    # Build fields list safely (only include what exists)
+    fields = ["name"]
+    if father_key: fields.append(father_key)
+    if root_key:   fields.append(root_key)
+
+    brands = frappe.get_all("Brand", fields=fields)
+
+    # ---------- determine root brands ----------
+    # roots_by_flag: brands with root_key == 1 (if available)
+    roots_by_flag = set()
+    if root_key:
+        for b in brands:
+            try:
+                if int(b.get(root_key) or 0) == 1:
+                    roots_by_flag.add(b["name"])
+            except Exception:
+                pass
+
+    # Helper: read father for a brand
+    def get_father(bname):
+        if not father_key:
+            return None
+        row = next((x for x in brands if x["name"] == bname), None)
+        if not row:
+            return None
+        return (row.get(father_key) or None)
+
+    # If no flag set, fallback roots = brands without father (when father_key exists)
+    if not roots_by_flag and father_key:
+        roots_by_flag = {b["name"] for b in brands if not (b.get(father_key) or None)}
+
+    # If still nothing, final fallback: every brand is its own root
+    if not roots_by_flag:
+        roots_by_flag = {b["name"] for b in brands}
+
+    # Map any brand -> a root brand
     cache_root = {}
-    def find_root(name, guard=0):
-        if name in cache_root: return cache_root[name]
-        if name not in bidx: 
-            cache_root[name] = None
+    def find_root(brand_name, depth=0):
+        if not brand_name:
             return None
-        if int(bidx[name].get("root") or 0) == 1:
-            cache_root[name] = name
-            return name
-        if guard > 20:  # avoid cycles
-            cache_root[name] = None
-            return None
-        parent = bidx[name].get("father")
+        if brand_name in cache_root:
+            return cache_root[brand_name]
+        if brand_name in roots_by_flag:
+            cache_root[brand_name] = brand_name
+            return brand_name
+        if depth > 20 or not father_key:
+            # no father chain available or too deep; treat itself as root if nothing else
+            cache_root[brand_name] = brand_name if brand_name in roots_by_flag else None
+            return cache_root[brand_name]
+        parent = get_father(brand_name)
         if not parent:
-            cache_root[name] = name if name in root_brands else None
-            return cache_root[name]
-        res = find_root(parent, guard+1)
-        cache_root[name] = res
+            cache_root[brand_name] = brand_name if brand_name in roots_by_flag else None
+            return cache_root[brand_name]
+        res = find_root(parent, depth + 1)
+        cache_root[brand_name] = res
         return res
 
-    # ---------- build item_code -> root_brand ----------
-    # Only items with a brand that resolves to a root
+    # ---------- Items: map item_code -> root brand ----------
     items = frappe.get_all("Item", fields=["name", "brand"], filters={"disabled": 0})
     item_root = {}
     for it in items:
@@ -83,15 +111,14 @@ def brand_warehouse_summary(companies=None, warehouses=None, include_groups=0, i
             item_root[it["name"]] = rb
 
     if not item_root:
-        return {"root_brands": sorted(root_brands), "warehouses": []}
+        return {"root_brands": sorted(roots_by_flag), "warehouses": []}
 
-    # ---------- select warehouses ----------
+    # ---------- Warehouses ----------
     wh_filters = {}
     if warehouses:
         wh_filters["name"] = ["in", warehouses]
     elif companies:
         wh_filters["company"] = ["in", companies]
-
     if not include_disabled:
         wh_filters["disabled"] = 0
     if not include_groups:
@@ -102,61 +129,56 @@ def brand_warehouse_summary(companies=None, warehouses=None, include_groups=0, i
         fields=["name","warehouse_name","company","parent_warehouse","is_group","disabled"],
         filters=wh_filters,
         order_by="company asc, warehouse_name asc",
-        limit_page_length=10000
+        limit_page_length=10000,
     )
     if not wh_rows:
-        return {"root_brands": sorted(root_brands), "warehouses": []}
+        return {"root_brands": sorted(roots_by_flag), "warehouses": []}
 
     wh_names = [w["name"] for w in wh_rows]
 
-    # ---------- aggregate stock from Bin ----------
-    # Bin is fast and already aggregated. We only need warehouse, item_code, actual_qty
+    # ---------- Bins ----------
     bins = frappe.get_all(
         "Bin",
         fields=["warehouse","item_code","actual_qty"],
         filters={"warehouse": ["in", wh_names]},
-        limit_page_length=2000000  # large cap; server will paginate internally
+        limit_page_length=2000000,
     )
 
-    # sum qty + count of items with stock > 0 by (warehouse, root_brand)
-    from collections import defaultdict
-    qty_map = defaultdict(float)
-    count_set = defaultdict(set)
+    qty_map   = defaultdict(float)  # (warehouse, root_brand) -> qty
+    item_sets = defaultdict(set)    # (warehouse, root_brand) -> items with qty>0
 
     for b in bins:
         it = b["item_code"]
         rb = item_root.get(it)
         if not rb:
             continue
-        wh = b["warehouse"]
+        wh  = b["warehouse"]
         qty = float(b.get("actual_qty") or 0)
         qty_map[(wh, rb)] += qty
         if qty > 0:
-            count_set[(wh, rb)].add(it)
+            item_sets[(wh, rb)].add(it)
 
-    # build brand order (optionally limited)
+    # Brand ordering (optionally limit to top-K)
     brand_totals = defaultdict(float)
     for (wh, rb), q in qty_map.items():
         brand_totals[rb] += q
-    brands_order = sorted(root_brands, key=lambda r: (-brand_totals.get(r, 0), r))
+
+    brands_order = sorted(roots_by_flag, key=lambda r: (-brand_totals.get(r, 0), r))
     if limit_brands > 0:
         brands_order = brands_order[:limit_brands]
 
-    # assemble result
-    wh_index = {w["name"]: w for w in wh_rows}
-    result_wh = []
+    out_wh = []
     for w in wh_rows:
-        entry = dict(w)
-        # for UI simplicity: include *all* requested brands; qty=0 if none
         brands_payload = []
         for rb in brands_order:
             q = qty_map.get((w["name"], rb), 0.0)
-            c = len(count_set.get((w["name"], rb), set()))
+            c = len(item_sets.get((w["name"], rb), set()))
             brands_payload.append({"root_brand": rb, "qty": round(q, 6), "item_count": int(c)})
-        entry["brands"] = brands_payload
-        result_wh.append(entry)
+        row = dict(w)
+        row["brands"] = brands_payload
+        out_wh.append(row)
 
     return {
         "root_brands": list(brands_order),
-        "warehouses": result_wh
+        "warehouses": out_wh,
     }
