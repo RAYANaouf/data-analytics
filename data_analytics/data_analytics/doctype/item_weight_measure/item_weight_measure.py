@@ -83,6 +83,7 @@ def generate_item_best_month(
         WHERE rn = 1
         ORDER BY item_code
     """
+    #ranked section is for assign number for each record using the ROW_NUMBER() OVER function and then we select the first one witch is the best month.
     best_rows = frappe.db.sql(best_sql, params, as_dict=True)  # [{item_code,y,m,total_qty}]
 
     # Gather on-hand stock for those items in this warehouse
